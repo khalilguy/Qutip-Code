@@ -70,17 +70,62 @@ for i in range(len(unique_nodelist)):
     qubit_dict[i] = []
     qubit_dict[i].append(ordered_nodelist[i])
     
-
+'''
 plt.figure()
 steingraph = nx.algorithms.approximation.steinertree.steiner_tree(grid_notdi, [(1,0), (2,2)])
 labels = nx.draw_networkx_labels(steingraph, pos=nx.spring_layout(steingraph))
 nx.draw(steingraph)
+'''
 
-connected = nx.algorithms.approximation.connectivity.all_pairs_node_connectivity(grid)
-simp_paths = nx.algorithms.simple_paths.all_simple_paths(grid, (1,0), (2,2))
+connected = nx.algorithms.connectivity.disjoint_paths.node_disjoint_paths(grid,(1,0),(2,2))
+simp_paths = nx.algorithms.simple_paths.all_simple_paths(grid, (1,0), (2,2), cutoff = 4)
+
+def countUnique(arr, n): 
+    # Set to store unique pairs 
+    s = set() 
+  
+    # Make all possible pairs 
+    for i in range(n): 
+        for j in range(n): 
+            s.add((arr[i], arr[j])) 
+  
+    # Return the size of the set 
+    return len(s) 
+  
 print(list(simp_paths))
+print(list(connected))
+n = 8
+r =2
+possible_combs = np.math.factorial(n)/(np.math.factorial(r)*(np.math.factorial(n-r)))
+print(int(possible_combs))
+
+def ListPossibleCombinations(arr,n,r):
+    possible_combs = int(np.math.factorial(n)/(np.math.factorial(r)*(np.math.factorial(n-r))))
+    combos = [0]*possible_combs
+    combo = [0]*r
+    return FindPossibleCombinations(arr, combos, combo, 0, n -1, 0,0, r)
 
 
+def FindPossibleCombinations(arr,combos, combo, start,end, combo_index,combos_index,r):
+    if (combo_index == r):
+        this_combo = list(combo)
+        combos[combos_index] = this_combo
+        combos_index = combos_index + 1
+        return combos, combos_index; 
+        
+    i = start;  
+    while(i <= end and end - i + 1 >= r - combo_index): 
+        combo[combo_index] = arr[i]; 
+        combos, combos_index = FindPossibleCombinations(arr,combos, combo, i + 1,end, combo_index + 1,combos_index,r);
+        i += 1;
+    return combos, combos_index
+    
+r = 2; 
+print(ListPossibleCombinations(ordered_nodelist, len(ordered_nodelist), r));
+    
+ 
+    
+    
 #print(qubit_dict)
 
 
