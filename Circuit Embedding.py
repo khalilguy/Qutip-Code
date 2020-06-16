@@ -65,11 +65,11 @@ while i != len(unique_nodelist):
 
 indexed_nodelist = list(range(len(unique_nodelist)))
 q1 = QubitCircuit(4)
-qubit_dict = {} #key is hardware qubit, value is its position and also a mapped logical qubit if applicable
+hardware_qubits_position_dict = {} #key is hardware qubit index, value is its position
 for i in range(len(unique_nodelist)):
-    qubit_dict[i] = []
-    qubit_dict[i].append(ordered_nodelist[i])
-    
+    hardware_qubits_position_dict[i] = []
+    hardware_qubits_position_dict[i].append(ordered_nodelist[i])
+hardware_qubits_mapped_qubit_dict = {}  #key is hardware qubit index, value is a mapped qubit
 '''
 plt.figure()
 steingraph = nx.algorithms.approximation.steinertree.steiner_tree(grid_notdi, [(1,0), (2,2)])
@@ -77,7 +77,7 @@ labels = nx.draw_networkx_labels(steingraph, pos=nx.spring_layout(steingraph))
 nx.draw(steingraph)
 '''
 
-connected = nx.algorithms.connectivity.disjoint_paths.node_disjoint_paths(grid,(1,0),(2,2))
+#connected = nx.algorithms.connectivity.disjoint_paths.node_disjoint_paths(grid,(1,0),(2,2)) #Worse version of all_simple_paths function 
 simp_paths = nx.algorithms.simple_paths.all_simple_paths(grid, (1,0), (2,2), cutoff = 4)
 
 def countUnique(arr, n): 
@@ -92,18 +92,14 @@ def countUnique(arr, n):
     # Return the size of the set 
     return len(s) 
   
-print(list(simp_paths))
-print(list(connected))
-n = 8
-r =2
-possible_combs = np.math.factorial(n)/(np.math.factorial(r)*(np.math.factorial(n-r)))
-print(int(possible_combs))
+#print(list(simp_paths))
+#print(list(connected))
 
 def ListPossibleCombinations(arr,n,r):
     possible_combs = int(np.math.factorial(n)/(np.math.factorial(r)*(np.math.factorial(n-r))))
     combos = [0]*possible_combs
     combo = [0]*r
-    return FindPossibleCombinations(arr, combos, combo, 0, n -1, 0,0, r)
+    return FindPossibleCombinations(arr, combos, combo, 0, n -1, 0,0, r)[0]
 
 
 def FindPossibleCombinations(arr,combos, combo, start,end, combo_index,combos_index,r):
@@ -119,12 +115,27 @@ def FindPossibleCombinations(arr,combos, combo, start,end, combo_index,combos_in
         combos, combos_index = FindPossibleCombinations(arr,combos, combo, i + 1,end, combo_index + 1,combos_index,r);
         i += 1;
     return combos, combos_index
-    
-r = 2; 
-print(ListPossibleCombinations(ordered_nodelist, len(ordered_nodelist), r));
-    
- 
-    
+
+ordered_pairs = ListPossibleCombinations(ordered_nodelist, len(ordered_nodelist), 2);
+indexed_pairs = ListPossibleCombinations(indexed_nodelist, len(ordered_nodelist), 2);
+
+def FindPathsofLengthN(grid,start, end, N):
+    paths_length_N = []
+    paths = nx.algorithms.simple_paths.all_simple_paths(grid, start, end, cutoff = N)
+    for i in range(len(paths)):
+         if len(paths[i]) == N:
+             paths_length_N.append(paths[i])
+             
+
+q1 = QubitCircuit(9)
+q1.add_gate("SNOT",0)
+q1.add_gate("SWAP",[0,1])
+q1.add_gate("SWAP",[1,2])
+q1.add_gate("SWAP",[2,5])
+
+Ulist = q1.propagators()
+
+print(Ulist[1].full == swap(9).full)
     
 #print(qubit_dict)
 
