@@ -35,41 +35,53 @@ labels = nx.draw_networkx_labels(grid, pos=nx.spring_layout(grid))
 
 
 nx.draw(grid)
-edgelist = list(grid.edges())
-#print(edgelist)
-unique_nodelist = []
 
-for i in range(len(edgelist)):
-    for j in range(len(edgelist[i])):
-        if edgelist[i][j] not in unique_nodelist:
-            unique_nodelist.append(edgelist[i][j])
-            
+def get_ordered_nodelist(grid):
+    """
+    Parameters:
+        Networkx Graph
+    """
+    edgelist = list(grid.edges())
+    #print(edgelist)
+    unique_nodelist = []
+    
+    for i in range(len(edgelist)):
+        for j in range(len(edgelist[i])):
+            if edgelist[i][j] not in unique_nodelist:
+                unique_nodelist.append(edgelist[i][j])
+                
 
-k = 0 #pointer for value of x-coordinate
-h = 0 # pointer for value of y-coordinate 
-i = 0 #pointer for position in index_edgelist
 
-ordered_nodelist = []
+    k = 0 #pointer for value of x-coordinate
+    h = 0 # pointer for value of y-coordinate 
+    i = 0 #pointer for position in index_edgelist
+    
+    ordered_nodelist = []
+    
+    while i != len(unique_nodelist):
+        for l in range(len(unique_nodelist)):
+            if k == 3:
+                k = 0
+                h = h + 1
+            if unique_nodelist[l][0] == h:
+                if unique_nodelist[l][1] == k:
+                    ordered_nodelist.append(unique_nodelist[l])
+                    i = i + 1
+                    k = k + 1
+                    break
+    indexed_nodelist = list(range(len(unique_nodelist)))
+    return ordered_nodelist, unique_nodelist
 
-while i != len(unique_nodelist):
-    for l in range(len(unique_nodelist)):
-        if k == 3:
-            k = 0
-            h = h + 1
-        if unique_nodelist[l][0] == h:
-            if unique_nodelist[l][1] == k:
-                ordered_nodelist.append(unique_nodelist[l])
-                i = i + 1
-                k = k + 1
-                break
 
-indexed_nodelist = list(range(len(unique_nodelist)))
-q1 = QubitCircuit(4)
 hardware_qubits_position_dict = {} #key is hardware qubit index, value is its position
 for i in range(len(unique_nodelist)):
-    hardware_qubits_position_dict[i] = []
-    hardware_qubits_position_dict[i].append(ordered_nodelist[i])
+    hardware_qubits_position_dict[i] = ordered_nodelist[i]
+
+    
 hardware_qubits_mapped_qubit_dict = {}  #key is hardware qubit index, value is a mapped qubit
+
+new_labels = {val:key for (key, val) in hardware_qubits_position_dict.items()}
+H = nx.relabel_nodes(grid_notdi, new_labels)
 '''
 plt.figure()
 steingraph = nx.algorithms.approximation.steinertree.steiner_tree(grid_notdi, [(1,0), (2,2)])
@@ -80,20 +92,7 @@ nx.draw(steingraph)
 #connected = nx.algorithms.connectivity.disjoint_paths.node_disjoint_paths(grid,(1,0),(2,2)) #Worse version of all_simple_paths function 
 simp_paths = nx.algorithms.simple_paths.all_simple_paths(grid, (1,0), (2,2), cutoff = 4)
 
-def countUnique(arr, n): 
-    # Set to store unique pairs 
-    s = set() 
-  
-    # Make all possible pairs 
-    for i in range(n): 
-        for j in range(n): 
-            s.add((arr[i], arr[j])) 
-  
-    # Return the size of the set 
-    return len(s) 
-  
-#print(list(simp_paths))
-#print(list(connected))
+
 
 def ListPossibleCombinations(arr,n,r):
     possible_combs = int(np.math.factorial(n)/(np.math.factorial(r)*(np.math.factorial(n-r))))
@@ -126,7 +125,12 @@ def FindPathsofLengthN(grid,start, end, N):
          if len(paths[i]) == N:
              paths_length_N.append(paths[i])
              
+print(H.edges())
 
+               
+noise_dict = {list(H.edges())[i]:np.random.rand() for i in range(len(H.edges()))}
+
+print()
 q1 = QubitCircuit(9)
 q1.add_gate("SNOT",0)
 q1.add_gate("SWAP",[0,1])
