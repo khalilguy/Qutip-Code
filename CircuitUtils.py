@@ -76,10 +76,11 @@ def FindPossibleCombinations(arr,combos, combo, start,end, combo_index,combos_in
 
 def FindPathsofLengthN(grid,start, end, N):
     paths_length_N = []
-    paths = nx.algorithms.simple_paths.all_simple_paths(grid, start, end, cutoff = N)
+    paths = list(nx.algorithms.simple_paths.all_simple_paths(grid, start, end, cutoff = N))
     for i in range(len(paths)):
          if len(paths[i]) == N:
              paths_length_N.append(paths[i])
+    return paths_length_N
              
 
 
