@@ -81,33 +81,22 @@ q1.add_gate("USWAP", targets = [1,2], arg_value = 1)
 q1.add_gate("USWAP", targets = [2,3], arg_value = 1)
 
 Ulist = q1.propagators()
-
+print(q1.gates[1].name)
 #print(ordered_pairs)
 
-
-def FindPathsofLengthN(g,start, end, N):
-    paths_length_N = []
-    paths = list(nx.algorithms.simple_paths.all_simple_paths(g, start, end, cutoff = N))
-    for i in range(len(paths)):
-         if len(paths[i]) == N:
-             paths_length_N.append(paths[i])
-    return paths_length_N
-            
+       
 #paths = list(nx.algorithms.simple_paths.all_simple_paths(grid, (0,0), (1,2), cutoff = 4))
 #print(paths)
-'''
-for i in range(len(indexed_pairs)):
-    length_n_list = cu.FindPathsofLengthN(H,indexed_pairs[i][0],indexed_pairs[i][1],4)
-'''
+
 length_n_list = cu.FindPathsofLengthN(grid,ordered_pairs[2][0],ordered_pairs[2][1],4)
 length_n_list = cu.FindPathsofLengthN(H,indexed_pairs[6][0],indexed_pairs[6][1],4)
 
 print(length_n_list)
 #print(list(grid.edges()))
-y = gate_sequence_product(q1.propagators())*tensor(basis(2,0),basis(2,0),basis(2,0),basis(2,0))
 previous_fidelity  = 0
 print(indexed_pairs)
 
+'''
 for pair in indexed_pairs:
     paths = list(nx.algorithms.simple_paths.all_simple_paths(H,pair[0], pair[1]))
     #length_n_list = cu.FindPathsofLengthN(H,indexed_pairs[u][0],indexed_pairs[u][0],4)
@@ -149,14 +138,10 @@ for pair in indexed_pairs:
             print(best_path)
             print(previous_fidelity)
         j = j + 1
-
+'''
 #y = gate_sequence_product(q1.propagators())*tensor(basis(2,0),basis(2,0),basis(2,0),basis(2,0))
 #y2 = gate_sequence_product(q2.propagators())*tensor(basis(2,0),basis(2,0),basis(2,0),basis(2,0))
 
 #print(noise_dict)
 #print(hardware_qubits_mapped_qubit_dict)
 
-#print(qc.gates)  
-
-
-#print(qubit_dict)
