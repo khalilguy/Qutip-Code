@@ -105,30 +105,58 @@ length_n_list = cu.FindPathsofLengthN(H,indexed_pairs[6][0],indexed_pairs[6][1],
 print(length_n_list)
 #print(list(grid.edges()))
 y = gate_sequence_product(q1.propagators())*tensor(basis(2,0),basis(2,0),basis(2,0),basis(2,0))
-p = 0
-for u in range(len(indexed_pairs)):
-    length_n_list = cu.FindPathsofLengthN(H,indexed_pairs[u][0],indexed_pairs[u][1],4)
+previous_fidelity  = 0
+print(indexed_pairs)
+
+for pair in indexed_pairs:
+    paths = list(nx.algorithms.simple_paths.all_simple_paths(H,pair[0], pair[1]))
+    #length_n_list = cu.FindPathsofLengthN(H,indexed_pairs[u][0],indexed_pairs[u][0],4)
     hardware_qubits_mapped_qubit_dict = {i:i for i in range(len(ordered_nodelist))}  #key is hardware qubit index, value is a mapped qubit
-    for path in map(nx.utils.pairwise, length_n_list):
-        t = list(path)
-        q2 = QubitCircuit(4)
+    j = 0
+    for path in map(nx.utils.pairwise, paths):
+        pairwise_edges = list(path)
+        num_qubits = len(paths[j])
+        q1 = QubitCircuit(num_qubits)
+        q2 = QubitCircuit(num_qubits)
+        q1.user_gates = {"NU": mg.user_cnot, "CSWAP":mg.cnot_swap, "USWAP": mg.user_swap}
         q2.user_gates = {"NU": mg.user_cnot, "CSWAP":mg.cnot_swap, "USWAP": mg.user_swap}
+        q1.add_gate("SNOT",0)
         q2.add_gate("SNOT",0)
-        for i in range(len(t)):
-            q2.add_gate("USWAP", targets = [i,i+1], arg_value = noise_dict_index_keys[t[i]])
-            hardware_qubits_mapped_qubit_dict[t[i][0]], hardware_qubits_mapped_qubit_dict[t[i][1]] = hardware_qubits_mapped_qubit_dict[t[i][1]], hardware_qubits_mapped_qubit_dict[t[i][0]]
-        y2 = gate_sequence_product(q2.propagators())*tensor(basis(2,0),basis(2,0),basis(2,0),basis(2,0))
-        o = fidelity(y,y2)
-        if o > p:
-            h = t
-            p = o #highest fidelity
-y = gate_sequence_product(q1.propagators())*tensor(basis(2,0),basis(2,0),basis(2,0),basis(2,0))
-y2 = gate_sequence_product(q2.propagators())*tensor(basis(2,0),basis(2,0),basis(2,0),basis(2,0))
+        i = 0 
+        for edge in pairwise_edges:
+            if len(pairwise_edges) == 1:
+                q1.add_gate("NU", targets = [i,i+1], arg_value = 1)
+                q2.add_gate("NU", targets = [i,i+1], arg_value = noise_dict_index_keys[edge])
+                i = i + 1
+                
+            elif i == (num_qubits - 1):
+                q1.add_gate("NU", targets = [i-1,i], arg_value = 1)
+                q2.add_gate("NU", targets = [i-1,i], arg_value = noise_dict_index_keys[edge])
+                i = i + 1
+            elif i < (num_qubits - 2):
+                q1.add_gate("USWAP", targets = [i,i+1], arg_value = 1)
+                q2.add_gate("USWAP", targets = [i,i+1], arg_value = noise_dict_index_keys[edge])
+                hardware_qubits_mapped_qubit_dict[edge[0]], hardware_qubits_mapped_qubit_dict[edge[1]] = hardware_qubits_mapped_qubit_dict[edge[1]], hardware_qubits_mapped_qubit_dict[edge[0]]
+                i = i + 1
+        y = gate_sequence_product(q1.propagators())*tensor([basis(2,0)]*num_qubits)
+        y2 = gate_sequence_product(q2.propagators())*tensor([basis(2,0)]*num_qubits)
+        fidel = fidelity(y,y2)
+        if fidel > previous_fidelity:
+            qc = q2
+            best_path = pairwise_edges
+            previous_fidelity = fidel #highest fidelity
+            print(qc.gates)
+            print(best_path)
+            print(previous_fidelity)
+        j = j + 1
+
+#y = gate_sequence_product(q1.propagators())*tensor(basis(2,0),basis(2,0),basis(2,0),basis(2,0))
+#y2 = gate_sequence_product(q2.propagators())*tensor(basis(2,0),basis(2,0),basis(2,0),basis(2,0))
 
 #print(noise_dict)
-print(hardware_qubits_mapped_qubit_dict)
-#for i in range(len(length_n_list)):
-    
+#print(hardware_qubits_mapped_qubit_dict)
 
-print(length_n_list)
+#print(qc.gates)  
+
+
 #print(qubit_dict)
