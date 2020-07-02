@@ -49,7 +49,7 @@ def get_ordered_nodelist(grid):
                     k = k + 1
                     break
     indexed_nodelist = list(range(len(unique_nodelist)))
-    return ordered_nodelist, unique_nodelist, indexed_nodelist
+    return ordered_nodelist, indexed_nodelist
 
 def ListPossibleCombinations(arr,n,r):
     possible_combs = int(np.math.factorial(n)/(np.math.factorial(r)*(np.math.factorial(n-r))))
