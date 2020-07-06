@@ -6,3 +6,10 @@ qcirc.tex
 Qcircuit_qutip.md
 
 *.ipynb_checkpoints/
+
+# ignore compiled python
+__pycache__
+
+# ignor editor detritus
+.vscode
+.rope
