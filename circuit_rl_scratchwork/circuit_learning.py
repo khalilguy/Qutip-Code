@@ -2,11 +2,9 @@
 # python3 -m pip install --user gym
 # sudo apt-get install python-gl
 """
-NOTES
-
-1/24 algo is stable but noticing the following, TODO:
-    - need to get back to tuning rewards, since they seem stochastic w/r
-        to the actions...
+NOTES: Staged loss function for something more relevant for noisy vs
+noiseless comparisons. Its just a template so loss is set to `1` regardless of
+inputs right now.
 
 """
 import collections
