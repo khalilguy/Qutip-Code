@@ -28,45 +28,35 @@ import gym
 from tensorflow.keras import layers
 import networkx as nx
 
-from qkm.utils import (analysis, grid_maps, circuit_generators, hardware_tools,
-                       backends, _matplotlib)
+from qkm.utils import (grid_maps, circuit_generators, backends, _matplotlib)
 
+#
+# def default_loss(vals, locs, kappa):
+#     """Mean squared error
+#
+#     Args:
+#         vals: list of values for sampled kernel locations
+#         locs: list corresponding locations for values in `k`
+#         kappa: full ideal kernel matrix
+#     """
+#     out = 0
+#     for val, loc in zip(vals, locs):
+#         out += (val - kappa[loc])**2 / len(vals)
+#     return out
 
-def default_loss(vals, locs, kappa):
-    """Mean squared error
+def fidelity_wf(psi_a, psi_b):
+    """Compute the fidelity between two wavefunctions along the second axis.
+
+    `psi_a` and `psi_b` should have shape (m, 2**n) and each contain m-many
+    wavefunctions over n qubits.
 
     Args:
-        vals: list of values for sampled kernel locations
-        locs: list corresponding locations for values in `k`
-        kappa: full ideal kernel matrix
+        psi_a, psi_b: `(m, 2**n)` array of wavefunctions with amplitudes along
+            the second axis.
+    Returns:
+        fidelity: `(m,)` array of computed fidelities.
     """
-    out = 0
-    for val, loc in zip(vals, locs):
-        out += (val - kappa[loc])**2 / len(vals)
-    return out
-
-
-def compute_loss_tfq(circuit, symbols, phases, entries):
-    """Compute batched loss with tfq backend
-
-    Args:
-        circuit: Circuit to simulate
-        symbols: symbols contained in parametrized circuit
-        phases: full set of phases to compute
-        entries: subset of kernel matrix entries to compute.
-    """
-    state_layer = tfq.layers.State()
-
-    X1_phis = np.asarray([phases[entry[0]] for entry in entries])
-    X2_phis = np.asarray([phases[entry[1]] for entry in entries])
-    states_1 = state_layer(circuit,
-                           symbol_names=symbols,
-                           symbol_values=X1_phis).to_tensor()
-    states_2 = state_layer(circuit,
-                           symbol_names=symbols,
-                           symbol_values=X2_phis).to_tensor()
-    arr = np.multiply(np.conj(states_1), states_2)
-    return np.abs(np.sum(arr, axis=1))**2
+    return np.diag(np.abs(psi_a.conj().dot(psi_b.T))**2)
 
 
 def pop_rz_iswap(op):
@@ -77,194 +67,6 @@ def load_circuit(path):
     """Load in a previously optimized and serialized circuit from `path`"""
     circuit_text = cirq.read_json(open(path))
     return cirq.read_json(json_text=circuit_text)
-
-
-# class DestructiveCircuitOptimizer():
-#     """Iteratively remove gates from a circuit to optimize the output kernel.
-#
-#     Must be binary classifier
-#     """
-#     def __init__(self, X, y, base_generator, dimension, seed=1):
-#         """
-#         Args:
-#             X: Training dataset
-#             y: Training labels (+1/-1 form)
-#             base_generator: Generator to stage initial circuit.
-#             seed: RNG
-#         """
-#
-#         self.X = X
-#         self.dimension = dimension
-#         self.base_generator = base_generator
-#         self.seed = seed
-#         np.random.seed(seed)
-#         self.kappa = self.make_ideal_kernel(y)
-#
-#     @staticmethod
-#     def make_ideal_kernel(y):
-#         """Construct a kernel wherein K(x, x') = 1 if x, x' are the same class"""
-#         out = np.zeros((y.shape[0], y.shape[0]))
-#         for i, y1 in enumerate(y):
-#             for j, y2 in enumerate(y):
-#                 out[i, j] = max(0, y1 * y2)
-#         return out
-#
-#     def survey_loss(self, backend, batch_size=10, loss_func=None):
-#         """Compute a series of losses without modifying the input circuit."""
-#
-#         if loss_func is None:
-#             loss_func = default_loss
-#
-#         # Compose an ordered sequence of gates to try to pop
-#         qubit_maps, gate_map = grid_maps.get_hardware_maps(
-#             num_qubits=self.dimension, num_circuits=1)
-#         # Retain the ability to modify phase encoding at some point in the future...
-#         current_phases = self.base_generator.linear_encoding(
-#             X=self.X, c=0.2, n_qubits=self.dimension, gate_map=gate_map)
-#         generator_init = self.base_generator(qubit_maps[0],
-#                                              gate_map,
-#                                              n_layers=2,
-#                                              cid=0,
-#                                              log=None)
-#         current_circuit = generator_init.hardware_circuit()
-#         all_locs = list(zip(*np.triu_indices(self.kappa.shape[0], k=1)))
-#         all_inds = list(range(len(all_locs)))
-#         print("circuit:")
-#         print(current_circuit)
-#         wrapped = circuit_generators.GeneratorWrapper(circuit=current_circuit,
-#                                                       generator=generator_init,
-#                                                       n_layers=2)
-#         for _ in range(100):
-#             # evaluate performance of kernel computed from modified circuit
-#             trial_entry_inds = np.random.choice(all_inds,
-#                                                 size=batch_size,
-#                                                 replace=False)
-#             trial_entries = sorted([all_locs[i] for i in trial_entry_inds],
-#                                    key=lambda t: t[0])
-#             # IMPORTANT: Never resolved the sorting issue for backends...
-#             sample_measurements = backend.kernel_matrix([wrapped],
-#                                                         current_phases,
-#                                                         current_phases,
-#                                                         n_shots=10000,
-#                                                         entries=trial_entries)
-#             sample_kernel = analysis.calculate_test_gram(
-#                 sample_measurements, 1).reshape(batch_size)
-#             loss = loss_func(sample_kernel, trial_entries, self.kappa)
-#
-#             print("current loss:", loss)
-#
-#     def train(self, backend, batch_size=10, loss_func=None, fname=None):
-#         """Optimize the kernel circuit by destructive means:
-#
-#         While total loss > eps:
-#             a. remove random gate from current_circuit (not H) to make new_circuit
-#             b. compute kernel matrix entries over random subset of length
-#                 `batch_size`
-#             c. compute empirical loss w/r to ideal kernel using `loss_func`.
-#                 i. If loss increased, replace removed gate
-#                 ii. If loss decreased, current_circuit <- new_circuit
-#         """
-#
-#         if loss_func is None:
-#             loss_func = default_loss
-#
-#         # Compose an ordered sequence of gates to try to pop
-#         qubit_maps, gate_map = grid_maps.get_hardware_maps(
-#             num_qubits=self.dimension, num_circuits=1)
-#         # Retain the ability to modify phase encoding at some point in the future...
-#         current_phases = self.base_generator.linear_encoding(
-#             X=self.X, c=0.2, n_qubits=self.dimension, gate_map=gate_map)
-#         generator_init = self.base_generator(qubit_maps[0],
-#                                              gate_map,
-#                                              n_layers=2,
-#                                              cid=0,
-#                                              log=None)
-#         current_circuit = generator_init.hardware_circuit()
-#
-#         # Define the policy. At each iteration, either randomly remove or
-#         # reinsert an operation. If this action results in improved loss
-#         # with respect to the ideal kernel, retain the change.
-#         epochs = 0  # denotes number of passes through potential ops-to-pop
-#         candidates = list(current_circuit.findall_operations(pop_rz_iswap))
-#         np.random.shuffle(candidates)
-#         removed = []
-#
-#         loss = 99
-#         losses = []
-#         all_locs = hardware_tools.all_indices(self.kappa.shape[0],
-#                                               self.kappa.shape[1])
-#         all_inds = list(range(len(all_locs)))
-#         # TODO: swap out for loss cutoff
-#         # while loss > 0.1:
-#         for _ in range(1000):
-#             # Try removing an operation, only once.
-#             new_circuit = current_circuit.copy()
-#
-#             coin_flip = np.random.randint(2)
-#             if coin_flip == 0:
-#                 # Remove an op.
-#                 try:
-#                     remove_op = candidates.pop()
-#                 except IndexError:
-#                     candidates = list(
-#                         current_circuit.findall_operations(pop_rz_iswap))
-#                     np.random.shuffle(candidates)
-#                     remove_op = candidates.pop()
-#                 new_circuit.batch_remove([remove_op])
-#             elif coin_flip == 1:
-#                 # Remove an op.
-#                 np.random.shuffle(removed)
-#                 try:
-#                     insert_op = removed.pop()
-#                 except IndexError:
-#                     continue
-#                 new_circuit.insert(*insert_op)
-#
-#             # evaluate performance of kernel computed from modified circuit
-#             trial_entry_inds = np.random.choice(all_inds,
-#                                                 size=batch_size,
-#                                                 replace=False)
-#             trial_entries = sorted([all_locs[i] for i in trial_entry_inds],
-#                                    key=lambda t: t[0])
-#             # IMPORTANT: Never resolved the sorting issue for backends...
-#             sample_measurements = backend.kernel_matrix([
-#                 circuit_generators.GeneratorWrapper(
-#                     circuit=new_circuit, generator=generator_init, n_layers=2)
-#             ],
-#                                                         current_phases,
-#                                                         current_phases,
-#                                                         n_shots=10000,
-#                                                         entries=trial_entries)
-#             sample_kernel = analysis.calculate_test_gram(
-#                 sample_measurements, 1).reshape(batch_size)
-#             new_loss = loss_func(sample_kernel, trial_entries, self.kappa)
-#
-#             # TODO: work out statistical fluctuations due to mini-batching here
-#             if new_loss < loss:
-#                 current_circuit = new_circuit
-#                 if coin_flip == 0:
-#                     removed.append(remove_op)
-#                     print("ejected the following op for improved loss:")
-#                     print(remove_op)
-#                 elif coin_flip == 1:
-#                     print("inserted the following op for improved loss:")
-#                     print(insert_op)
-#
-#             loss = new_loss
-#             losses.append(loss)
-#             print("current loss:", loss)
-#             print("circuit:")
-#             print(current_circuit)
-#
-#         if fname is None:
-#             fname = "circuit_opt_{}.json".format(self.seed)
-#
-#         print("Saving optimized circuit locally to {}".format(fname))
-#         with open(fname, "w") as f:
-#             json.dump(cirq.to_json(current_circuit), f)
-#         np.save("loss_history_{}".format(fname), np.asarray(losses))
-#
-#         return current_circuit, losses
 
 
 GATE_ACTION_SET = [
@@ -282,6 +84,13 @@ GATE_SET = [
     cirq.XPowGate,
 ]
 
+
+def apply_circuit_noise(circuit):
+    """PLACEHOLDER: This is where an iteration's circuit would become noisy.
+
+    probably this would be done with something like cirq.Circuit().with_noise.
+    """
+    return circuit
 
 def gate_set_index(gate):
     for i, g in enumerate(GATE_SET):
@@ -336,7 +145,12 @@ class CircuitGeneratorEnv(gym.Env):
 
         self.X = X
         self.dimension = dimension
-        self.backend = backends.SimulatedWavefunctionBackend()
+
+
+        # The loss depends on how the noiseless vs. noisy invocation of
+        # a given circuit performs
+        self.noiseless_simulator = cirq.Simulator()
+        self.noisy_simulator = cirq.Simulator() #TODO
 
         # Compose an ordered sequence of gates to try to pop
         qubit_maps, self.gate_map = grid_maps.get_hardware_maps(
@@ -354,6 +168,7 @@ class CircuitGeneratorEnv(gym.Env):
         self.phases = self.generator_init.linear_encoding(
             X=self.X, c=0.2, n_qubits=self.dimension, gate_map=self.gate_map)
         self.phases_X = np.hstack((self.phases, self.X))
+
         self.base_circuit = self.generator_init.simulation_circuit()
         self.symbols = ["psi_{}".format(i) for i in range(len(self.qubits))]
         # Maintain a connectivity graph for this qubit architecture
@@ -445,37 +260,21 @@ class CircuitGeneratorEnv(gym.Env):
     def _calculate_reward(self, circuit):
         """Calculate the reward to give based on the current state of the circuit.
 
-        Reward is defined as the loss incurred w/r to ideal kernel at this step,
-        minus the loss incurred w/r to ideal kernel at previous step.
-
-        To calculate reward with respect to a 'simulation circuit'
-        (U: U(x)|0> -> |phi(x)>), the form of the new circuit must be adjointed
-        and filled with daggered parameters
+         Reward is defined as the average fidelity of the noiseless state
+        compared to the noisy state over some minibatch of input data.
         """
-        all_locs = list(zip(*np.triu_indices(self.kappa.shape[0], k=1)))
-        all_inds = list(range(len(all_locs)))
-        # evaluate performance of kernel computed from modified circuit
-        trial_entry_inds = np.random.choice(all_inds,
-                                            size=self.batch_size,
-                                            replace=False)
-        trial_entries = sorted([all_locs[i] for i in trial_entry_inds],
-                               key=lambda t: t[0])
-        # IMPORTANT: Never resolved the sorting issue for backends...
-        if TFQ:
-            # 1/27/2020: verified this output against the backends output.
-            sample_kernel = compute_loss_tfq(circuit,
-                                             self.generator_init.symbols() + self.symbols,
-                                             self.phases_X, trial_entries)
-        else:
-            sample_kernel = self.backend.kernel_matrix(
-                circuit_generators.GeneratorWrapper(
-                    circuit=circuit, generator=self.generator_init,
-                    n_layers=2),
-                self.phases,
-                self.phases,
-                entries=trial_entries)
 
-        loss = default_loss(sample_kernel, trial_entries, self.kappa)
+        batch_inds = np.random.choice(all_inds,
+                                    size=self.batch_size,
+                                    replace=False)
+        data_batch = self.phases[batch_inds, :]
+        resolvers = [dict(zip(self.symbols, data)) for data in data_batch]
+
+        # Simulate the current iteration of the circuit with/without noise.
+        noisy_states = self.noisy_simulator.simulate_sweep(apply_circuit_noise(circuit), params=resolvers)
+        true_states = self.noiseless_simulator.simulate_sweep(circuit, params=resolvers)
+
+        loss = np.average(fidelity_wf(noisy_states, true_states))
         # regularize the very first reward computation
         if self.previous_loss is None:
             self.previous_loss = loss

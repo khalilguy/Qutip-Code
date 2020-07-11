@@ -4,7 +4,6 @@ import matplotlib as mpl
 import numpy as np
 
 # For tests.
-import time
 import cirq
 
 
