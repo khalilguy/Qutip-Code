@@ -9,7 +9,6 @@ NOTES
         to the actions...
 
 """
-import json
 import collections
 import random
 
@@ -17,32 +16,12 @@ import cirq
 import numpy as np
 import sympy
 import tensorflow as tf
-TFQ = False
-if TFQ:
-    try:
-        import tensorflow_quantum as tfq
-    except ModuleNotFoundError:
-        TFQ = False
-
 import gym
 from tensorflow.keras import layers
 import networkx as nx
 
-from qkm.utils import (grid_maps, circuit_generators, backends, _matplotlib)
+import _matplotlib
 
-#
-# def default_loss(vals, locs, kappa):
-#     """Mean squared error
-#
-#     Args:
-#         vals: list of values for sampled kernel locations
-#         locs: list corresponding locations for values in `k`
-#         kappa: full ideal kernel matrix
-#     """
-#     out = 0
-#     for val, loc in zip(vals, locs):
-#         out += (val - kappa[loc])**2 / len(vals)
-#     return out
 
 def fidelity_wf(psi_a, psi_b):
     """Compute the fidelity between two wavefunctions along the second axis.
@@ -152,13 +131,13 @@ class CircuitGeneratorEnv(gym.Env):
         self.noiseless_simulator = cirq.Simulator()
         self.noisy_simulator = cirq.Simulator() #TODO
 
-        # Compose an ordered sequence of gates to try to pop
-        qubit_maps, self.gate_map = grid_maps.get_hardware_maps(
-            num_qubits=dimension, num_circuits=1)
+        # Defines the connectivity allowed for the circuit
+        self.qubit_map = [(0, 0), (0, 1), (0, 2), (0, 3)]
+        self.gate_map = [(0, 1), (1, 2), (2, 3)]
 
         # Circuit and generator initialization
         # These will be used to query kernel values at each learning step.
-        self.qubit_map = qubit_maps[0]
+
         self.qubits = [cirq.GridQubit(*xy) for xy in self.qubit_map]
         self.generator_init = base_generator(self.qubit_map,
                                              self.gate_map,
@@ -168,9 +147,9 @@ class CircuitGeneratorEnv(gym.Env):
         self.phases = self.generator_init.linear_encoding(
             X=self.X, c=0.2, n_qubits=self.dimension, gate_map=self.gate_map)
         self.phases_X = np.hstack((self.phases, self.X))
-
         self.base_circuit = self.generator_init.simulation_circuit()
-        self.symbols = ["psi_{}".format(i) for i in range(len(self.qubits))]
+        self.symbols = ["phi0_{}".format(i) for i in range(len(self.qubits))]
+
         # Maintain a connectivity graph for this qubit architecture
         self.G = nx.Graph()
         self.G.add_edges_from(self.gate_map)
@@ -264,15 +243,18 @@ class CircuitGeneratorEnv(gym.Env):
         compared to the noisy state over some minibatch of input data.
         """
 
-        batch_inds = np.random.choice(all_inds,
+        batch_inds = np.random.choice(range(len(self.X)),
                                     size=self.batch_size,
                                     replace=False)
         data_batch = self.phases[batch_inds, :]
         resolvers = [dict(zip(self.symbols, data)) for data in data_batch]
 
         # Simulate the current iteration of the circuit with/without noise.
-        noisy_states = self.noisy_simulator.simulate_sweep(apply_circuit_noise(circuit), params=resolvers)
-        true_states = self.noiseless_simulator.simulate_sweep(circuit, params=resolvers)
+        noisy_trials = self.noisy_simulator.simulate_sweep(apply_circuit_noise(circuit), params=resolvers)
+        true_trials = self.noiseless_simulator.simulate_sweep(circuit, params=resolvers)
+
+        noisy_states = np.asarray([trial.final_state for trial in noisy_trials])
+        true_states = np.asarray([trial.final_state for trial in true_trials])
 
         loss = np.average(fidelity_wf(noisy_states, true_states))
         # regularize the very first reward computation
@@ -338,7 +320,7 @@ class CircuitGeneratorEnv(gym.Env):
 
             # symbol = self.generator_init.symbols()[qubit_i]
             # Here I add a new symbol, that refers _directly_ to X[i]
-            symbol = sympy.Symbol("psi_{}".format(qubit_i))
+            symbol = sympy.Symbol("phi0_{}".format(qubit_i))
             self.current_circuit.insert(moment,
                                         gate_to_add(symbol)(qubit),
                                         strategy=cirq.InsertStrategy.EARLIEST)

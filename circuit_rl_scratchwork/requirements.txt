@@ -1,0 +1,6 @@
+networkx
+cirq==0.7.0
+gym
+python-gl
+tensorflow
+sympy
