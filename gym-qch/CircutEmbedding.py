@@ -57,14 +57,15 @@ def get_bell_state(position_grid,circuit_width,noise_dict):
     combinations_of_hardware_qubits = cu.ListPossibleCombinations(indexed_hardware_qubits, len(indexed_hardware_qubits), circuit_width);
     qc = 0
     best_path = 0
-    highest_fidelity = 0 
+    highest_fidelity = 0
+    iterations = 0
     for i, working_qubits in enumerate(combinations_of_hardware_qubits):
         permutes = list(itertools.permutations(working_qubits))
         for permute in permutes:
-            qc, best_path, highest_fidelity = get_best_circuit(H,permute, qc, best_path, highest_fidelity, noise_dict)
-    return qc, best_path, highest_fidelity         
+            qc, best_path, highest_fidelity, iterations = get_best_circuit(H,permute, qc, best_path, highest_fidelity, noise_dict,iterations)
+    return qc, best_path, highest_fidelity,iterations       
 
-def get_best_circuit(grid,permute, qc,best_path, highest_fidelity,noise_dict):
+def get_best_circuit(grid,permute, qc,best_path, highest_fidelity,noise_dict,iterations):
     #permutes = list(itertools.permutations(working_qubits))[0]
     
     pairs_of_qubits = nx.utils.pairwise(permute)
@@ -76,65 +77,69 @@ def get_best_circuit(grid,permute, qc,best_path, highest_fidelity,noise_dict):
     #paths.append(list(nx.algorithms.simple_paths.all_simple_paths(grid,pairs_of_qubits[0], pairs_of_qubits[1])))
     branch_size_list = [0]*len(paths)
     num_nodes = grid.number_of_nodes()
-    return create_circuit(num_nodes,paths, 0,[], branch_size_list,qc,best_path,highest_fidelity,noise_dict,set())
+    return create_circuit(num_nodes,paths, 0,[], branch_size_list,qc,best_path,highest_fidelity,noise_dict,set(),iterations)
 
     
-def create_circuit(num_nodes,paths, current_path_index,paths_list,bran_size_list,qc,best_path,highest_fidelity, noise_dict, qubit_set):
+def create_circuit(num_nodes,paths, current_path_index,paths_list,bran_size_list,qc,best_path,highest_fidelity, noise_dict, qubit_set,iterations):
     #print(paths[current_path_index])
     for i, p in enumerate(map(nx.utils.pairwise, paths[current_path_index])):
+
         if current_path_index == 0:
             qubit_set = set()
-            qubit_set.update(paths[current_path_index][i])
             other_set = set()
+            
         if current_path_index > 0:
             other_set = set(paths[current_path_index][i])
-            print(other_set)
-            print(len(qubit_set.intersection(other_set)))
-        if len(qubit_set.intersection(other_set)) == 1 or  current_path_index == 0:
-            qubit_set.update(paths[current_path_index][i])
+            
+        if len(qubit_set.intersection(other_set)) == 1 or current_path_index == 0:
             #print(list(p))
             cp = list(p)
-            #print(current_paths_list)
             bran_size_list[current_path_index] = len(cp)
+            #print(bran_size_list)
             current_paths_list = paths_list + cp
             #print(current_paths_list)
-            #print(current_path_index)
             if (current_path_index + 1) == len(paths):
+                iterations += 1
+
                 qubits = set()
                 for k in range(len(current_paths_list)):
                     qubits.add(current_paths_list[k][0])
                     qubits.add(current_paths_list[k][1])
                     if len(qubits) == num_nodes:
                         break
+                #print(qubits)
                 num_qubits = len(qubits)
-                mapping = {list(qubits)[m]:m for m in range(num_qubits)}
-                hardware_qubits_mapped_qubit_dict = {k:k for k in range(num_qubits)}
+                #mapping = {list(qubits)[m]:m for m in range(num_qubits)}
+                #hardware_qubits_mapped_qubit_dict = {k:k for k in range(num_qubits)}
                 q1 = QubitCircuit(num_qubits)
                 q2 = QubitCircuit(num_qubits)
                 q1.user_gates = {"NU": mg.user_cnot, "CSWAP":mg.cnot_swap, "USWAP": mg.user_swap}
                 q2.user_gates = {"NU": mg.user_cnot, "CSWAP":mg.cnot_swap, "USWAP": mg.user_swap}
-                q1.add_gate("SNOT",mapping[current_paths_list[0][0]])
-                q2.add_gate("SNOT",mapping[current_paths_list[0][0]])
+                q1.add_gate("SNOT",0)
+                q2.add_gate("SNOT",0)
                 starting_place = 0
                 ending = 0
                 #print(bran_size_list)
+                l = 0
                 for size in bran_size_list:
                     ending = ending + size
+                    #print(current_paths_list[starting_place:ending])
      
-                    for l, edge in enumerate(current_paths_list[starting_place:ending]):
+                    for edge in current_paths_list[starting_place:ending]:
                         # if len(current_paths_list) == 1:
                         #     q1.add_gate("NU", targets = [mapping[edge[0]],mapping[edge[1]]], arg_value = 1)
                         #     q2.add_gate("NU", targets = [mapping[edge[0]],mapping[edge[1]]], arg_value = noise_dict_index_keys[edge])
                     
-                        if l == (num_qubits - 2):
-                            q1.add_gate("NU", targets = [mapping[edge[0]],mapping[edge[1]]], arg_value = 1)
-                            q2.add_gate("NU", targets = [mapping[edge[0]],mapping[edge[1]]], arg_value = noise_dict[edge])
-                        elif l < (num_qubits - 2):
-                            q1.add_gate("USWAP", targets = [mapping[edge[0]],mapping[edge[1]]], arg_value = 1)
-                            q2.add_gate("USWAP", targets = [mapping[edge[0]],mapping[edge[1]]], arg_value = noise_dict[edge])
-                            hardware_qubits_mapped_qubit_dict[mapping[edge[0]]], hardware_qubits_mapped_qubit_dict[mapping[edge[1]]] = hardware_qubits_mapped_qubit_dict[mapping[edge[1]]], hardware_qubits_mapped_qubit_dict[mapping[edge[0]]]
+                        if l == (ending - 1):
+                            q1.add_gate("NU", targets = [l,l+1], arg_value = 1)
+                            q2.add_gate("NU", targets = [l,l+1], arg_value = noise_dict[edge])
+                        elif l < (ending - 1):
+                            q1.add_gate("USWAP", targets = [l,l+1], arg_value = 1)
+                            q2.add_gate("USWAP", targets = [l,l+1], arg_value = noise_dict[edge])
+                            #hardware_qubits_mapped_qubit_dict[mapping[edge[0]]], hardware_qubits_mapped_qubit_dict[mapping[edge[1]]] = hardware_qubits_mapped_qubit_dict[mapping[edge[1]]], hardware_qubits_mapped_qubit_dict[mapping[edge[0]]]
+                        l = l + 1
                     #print(current_paths_list[starting_place:ending])    
-                    starting_place = size
+                    starting_place = starting_place + size
                 y = gate_sequence_product(q1.propagators())*tensor([basis(2,0)]*num_qubits)
                 y2 = gate_sequence_product(q2.propagators())*tensor([basis(2,0)]*num_qubits)
                 fidel = fidelity(y,y2)
@@ -145,18 +150,19 @@ def create_circuit(num_nodes,paths, current_path_index,paths_list,bran_size_list
                     highest_fidelity = fidel #highest fidelity
                     print(highest_fidelity)
                     print(qc.gates)
-                    print(mapping)
                     print(best_path)
         
         
         if (i+1) == len(paths[current_path_index]) and (current_path_index + 1) == len(paths):
-            return qc, best_path, highest_fidelity
+            return qc, best_path, highest_fidelity,iterations
         j = current_path_index
+        current_set = qubit_set
         
-        if (current_path_index + 1) < len(paths):
+        if ((current_path_index + 1) < len(paths) and len(current_set.intersection(other_set)) == 1) or (len(paths) > 1 and current_path_index == 0):
+            current_set.update(paths[current_path_index][i])
             j += 1
-            qc,best_path, highest_fidelity = create_circuit(num_nodes,paths,j, current_paths_list,bran_size_list,qc,best_path,highest_fidelity,noise_dict)
-    return qc, best_path, highest_fidelity
+            qc,best_path, highest_fidelity,iterations = create_circuit(num_nodes,paths,j, current_paths_list,bran_size_list,qc,best_path,highest_fidelity,noise_dict,current_set,iterations)
+    return qc, best_path, highest_fidelity, iterations 
 
 
 
